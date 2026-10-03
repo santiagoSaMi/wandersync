@@ -18,7 +18,7 @@ Documentación técnica con diagramas de secuencia de la SAGA: [`docs/ARQUITECTU
 
 | Qué | Estado |
 |---|---|
-| Tests sin Docker: parsers, motor SAGA y su runner, OrderActions (reintentos), API de orders (idempotencia, anti-IDOR, compensación), auth (Argon2id, bloqueo, session fixation), contrato de flights/hotels/cars, gateway (`createBooking`, límites de consulta, IP del cliente) y frontend (sondeo del checkout) | **147 tests pasan** (`make test`; los de integración requieren `pip install -r requirements-test.txt` + requirements de los servicios y `npm install` en `frontend/`; sin ellos se omiten, y en CI, con `REQUIRE_TEST_DEPS=1`, fallarían) |
+| Tests sin Docker: parsers, motor SAGA y su runner, OrderActions (reintentos), API de orders (idempotencia, anti-IDOR, compensación), auth (Argon2id, bloqueo, session fixation), contrato de flights/hotels/cars, gateway (`createBooking`, límites de consulta, IP del cliente) y frontend (sondeo del checkout) | **153 tests pasan** (`make test`; los de integración requieren `pip install -r requirements-test.txt` + requirements de los servicios y `npm install` en `frontend/`; sin ellos se omiten, y en CI, con `REQUIRE_TEST_DEPS=1`, fallarían) |
 | `docker compose up` completo (14 servicios sanos) | **Verificado** (2026-10-03) |
 | Ingesta Prefect + Dask contra Supabase real: grafo con flechas, reintentos, artefactos, cron cada 30 min | **Verificado**: 120 consultas, 3 workers, ~2.600 ofertas cargadas |
 | GraphQL de punta a punta (nginx → gateway → Supabase), sin over-fetching visible en `extensions.supabase` | **Verificado** con datos reales |
@@ -121,6 +121,12 @@ La línea de tiempo muestra Pago ✔, Vuelo ✔, Hotel ✔, Auto ✖ (3 intentos
 unos 2,5 s y luego ✔/✖, y las compensaciones se ven igual, una a una (≈ 12 s el camino feliz, ≈ 20 s con el fallo del auto).
 Ajusta la pausa con `DEMO_STEP_DELAY_MS` en `.env` (máx. 5000; requiere `ALLOW_FAILURE_SIMULATION=true`).
 Respaldo por consola con el mismo efecto: `make demo-slow`.
+
+**La SAGA en Prefect (con flechas):** cada reserva aparece en http://localhost:4200 → *Runs* como el flow run
+**`SAGA reserva <orden>`** (el diálogo de resultado muestra el id y un enlace). Ábrelo mientras corre en modo paso a paso:
+el grafo crece en vivo. Camino feliz: `1 · Pago → 2 · Vuelo → 3 · Hotel → 4 · Auto → 5 · Factura` (estado *Confirmada*).
+Con el fallo del auto se dibuja una "V": los pasos bajan, `4 · Reserva de auto` queda en rojo y las reversiones suben en
+orden inverso, cada una con una flecha al paso que deshace (estado *Revertida*). Los logs del run explican cada paso.
 Evidencia en las bases de datos:
 ```bash
 docker compose exec postgres psql -U postgres -d orders_db  -c "select left(id,8) id,status,failure_reason from orders order by created_at desc limit 3;"
@@ -143,7 +149,7 @@ services/
   orders/                 ORQUESTADOR de la SAGA + pagos/facturas + recuperación   (app/saga.py = motor)
   auth/                   usuarios, Argon2id, sesiones Redis, anti session-fixation
   gateway/                GraphQL (Strawberry): Supabase + auth + orders, rate limiting
-frontend/                 React + Vite + Apollo Client, servido por nginx
+frontend/                 React + Vite + Apollo Client; UI con Tailwind CSS v4, shadcn/ui, Motion, Lucide, Embla y Lenis (nginx + CSP estricta)
 scripts/                  init_env, audit.sh, security_checks.py, demo_saga.py
 docs/                     ARQUITECTURA.md, SEGURIDAD.md, evidencias de auditoría
 ```

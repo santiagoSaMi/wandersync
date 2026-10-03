@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from .actions import OrderActions
 from .models import Base, Invoice, Order, SagaStep, now
+from .prefect_mirror import MirroredRepo, PrefectMirror
 from .repo import SqlSagaRepo
 from .runner import SagaRunner
 from .saga import PENDING, SagaEngine
@@ -39,6 +40,8 @@ RECOVERY_INTERVAL_S = int(os.getenv("SAGA_RECOVERY_INTERVAL_SECONDS", "30"))
 # Cuanto espera POST /orders el final de la SAGA antes de responder PENDING (debe ser << timeout de gateway/nginx)
 SYNC_WAIT_S = float(os.getenv("SAGA_SYNC_WAIT_SECONDS", "10"))
 SHUTDOWN_GRACE_S = float(os.getenv("SAGA_SHUTDOWN_GRACE_SECONDS", "8"))
+# Observabilidad: cada SAGA se refleja en Prefect como un flow run con un paso por tarea (vacío = desactivado)
+PREFECT_API_URL = os.getenv("PREFECT_API_URL", "")
 SERVICE_URLS = {
     "FLIGHT": os.getenv("FLIGHTS_URL", "http://flights:8000"),
     "HOTEL": os.getenv("HOTELS_URL", "http://hotels:8000"),
@@ -48,6 +51,7 @@ SERVICE_URLS = {
 db_engine = create_async_engine(DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=10)
 Session = async_sessionmaker(db_engine, expire_on_commit=False)
 
+mirror = PrefectMirror(None)          # se reemplaza en el lifespan si hay PREFECT_API_URL
 runner = SagaRunner()               # SAGAs en segundo plano + conjunto `inflight` de este proceso
 saga: SagaEngine
 repo: SqlSagaRepo
@@ -102,10 +106,15 @@ async def lifespan(_: FastAPI):
     else:
         raise RuntimeError("no se pudo conectar a orders_db")
 
+    global mirror
     http = httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=2.0))
+    prefect_http = httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=2.0))
+    mirror = PrefectMirror(PREFECT_API_URL, prefect_http)
+    mirror.start()
+    log.info("espejo de la SAGA en Prefect: %s", PREFECT_API_URL or "desactivado")
     repo = SqlSagaRepo(Session)
     actions = OrderActions(Session, http, SERVICE_URLS, INTERNAL_TOKEN, ALLOW_SIMULATION)
-    saga = SagaEngine(repo, actions)
+    saga = SagaEngine(MirroredRepo(repo, mirror), actions)     # la base guarda; Prefect lo refleja después
 
     # Al arrancar NO se asume que todo lo no final es huerfano: con varias replicas, otra puede estar
     # ejecutandolo. Se aplica el mismo umbral que el bucle (sin progreso durante STUCK_AFTER_S).
@@ -114,6 +123,8 @@ async def lifespan(_: FastAPI):
     yield
     task.cancel()
     await runner.shutdown(SHUTDOWN_GRACE_S)         # deja terminar las SAGAs en curso antes de cerrar HTTP/BD
+    await mirror.close()                            # vacía (con margen) los eventos pendientes hacia Prefect
+    await prefect_http.aclose()
     await http.aclose()
     await db_engine.dispose()
 
@@ -197,6 +208,11 @@ async def create_order(body: OrderIn, response: Response):
     # muestre cada paso desde el primero. No se persiste: si el proceso cae, la recuperacion va sin pausas.
     step_delay_s = body.step_delay_ms / 1000 if ALLOW_SIMULATION else 0
     wait_s = 0 if step_delay_s else SYNC_WAIT_S
+    mirror.order_started(order.id, {
+        "total": f"{order.total_cents / 100:.2f} {order.currency}",
+        "vuelo": order.items["FLIGHT"]["title"], "hotel": order.items["HOTEL"]["title"], "auto": order.items["CAR"]["title"],
+        "fallo_simulado": order.simulate_failure, "paso_a_paso": bool(step_delay_s),
+    })
     if not await runner.start_and_wait(order.id, partial(saga.run, step_delay_s=step_delay_s), wait_s):
         if step_delay_s:
             log.info("order=%s SAGA en modo presentacion (%.1f s por paso): se responde PENDING (202)",

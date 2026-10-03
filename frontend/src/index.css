@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------------------------------------
+   WanderSync · tema (Tailwind v4 + tokens de shadcn/ui). Dirección visual: revista de viajes
+   editorial + tarjeta de embarque. Tipografías (Google Fonts, ver index.html):
+   Instrument Serif (titulares), Geist (interfaz), Geist Mono (códigos IATA, vuelos, facturas).
+   ------------------------------------------------------------------------------------------------ */
+
+:root {
+  --radius: 1rem;
+  --background: oklch(0.975 0.007 85);        /* marfil cálido */
+  --foreground: oklch(0.23 0.045 262);        /* tinta medianoche */
+  --card: oklch(0.995 0.002 85);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.27 0.06 262);            /* medianoche */
+  --primary-foreground: oklch(0.98 0.006 85);
+  --secondary: oklch(0.945 0.012 85);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.95 0.01 85);
+  --muted-foreground: oklch(0.5 0.03 262);
+  --accent: oklch(0.94 0.02 50);
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(0.6 0.2 22);
+  --border: oklch(0.9 0.012 85);
+  --input: oklch(0.88 0.014 85);
+  --ring: oklch(0.68 0.19 38);
+
+  --coral: oklch(0.68 0.19 38);               /* acento de marca: atardecer */
+  --coral-foreground: oklch(0.99 0.005 85);
+  --sky: oklch(0.78 0.1 225);
+  --success: oklch(0.6 0.13 160);
+  --warning: oklch(0.72 0.15 68);
+  --midnight: oklch(0.2 0.05 264);
+}
+
+@theme inline {
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-coral: var(--coral);
+  --color-coral-foreground: var(--coral-foreground);
+  --color-sky: var(--sky);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-midnight: var(--midnight);
+
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 6px);
+
+  --animate-drift: drift 18s ease-in-out infinite alternate;
+}
+
+@keyframes drift {
+  from { transform: translate3d(-4%, -3%, 0) scale(1); }
+  to { transform: translate3d(5%, 4%, 0) scale(1.12); }
+}
+
+/* Cuadrícula sutil del hero y textura de "papel" (todo en este archivo: la CSP no admite estilos inline) */
+@utility hero-grid {
+  background-image:
+    linear-gradient(to right, oklch(1 0 0 / 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(1 0 0 / 0.06) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 35%, black 30%, transparent 80%);
+}
+
+@utility paper-dots {
+  background-image: radial-gradient(oklch(0.23 0.045 262 / 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+  ::selection { background: oklch(0.68 0.19 38 / 0.25); }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-ring; }
+  button:not(:disabled), [role="button"]:not(:disabled), summary { cursor: pointer; }
+}

@@ -130,6 +130,8 @@ services:
       FLIGHTS_URL: http://flights:8000
       HOTELS_URL: http://hotels:8000
       CARS_URL: http://cars:8000
+      # Observabilidad: cada SAGA aparece en Prefect (UI :4200) como flow run con flechas entre pasos
+      PREFECT_API_URL: http://prefect-server:4200/api
       ALLOW_FAILURE_SIMULATION: ${ALLOW_FAILURE_SIMULATION:-false}
     depends_on:
       postgres: { condition: service_healthy }
@@ -239,7 +241,9 @@ services:
       interval: 8s
       timeout: 5s
       retries: 30
-    networks: [data]
+    # backend: el servicio orders refleja cada SAGA en Prefect (flow run por reserva). backend sigue siendo
+    # interna (sin salida a internet); Prefect solo es alcanzable desde los contenedores, no desde fuera.
+    networks: [data, backend]
 
   dask-scheduler:
     <<: *ingestion

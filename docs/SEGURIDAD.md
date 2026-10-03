@@ -17,6 +17,7 @@
 - **Autorización (anti-IDOR):** `order` y `myOrders` filtran por el `user_id` de la sesión; el servicio de órdenes devuelve 404 si la orden es de otro usuario. El `user_id` jamás viene del cliente.
 - **Integridad de precios:** el gateway relee las ofertas en Supabase; el cliente solo envía IDs.
 - **Segmentación de red:** `backend` es una red `internal` (sin salida a internet); solo `gateway` y `frontend` están en `edge`; puertos publicados solo en `127.0.0.1`. Microservicios sin puertos publicados.
+  `prefect-server` está además en `backend` para que `orders` refleje cada SAGA en Prefect; `backend` sigue sin salida a internet y la API de Prefect solo se publica en `127.0.0.1:4200`.
 - **IP del cliente no falsificable:** el rate limiting por IP solo cree `X-Real-IP` si la conexión viene del nginx (`TRUSTED_PROXY_HOSTS=frontend`, resuelto por DNS de Docker y refrescado cada 30 s); por defecto no se confía en ningún proxy. Una petición directa al puerto 8000 con la cabecera falsificada se limita por su IP real.
 - **Autenticación servicio-a-servicio:** `X-Internal-Token` (comparación en tiempo constante) en todos los servicios internos.
 - **Mínimo privilegio en datos:** cada microservicio tiene su base y su rol de Postgres; en Supabase el rol `anon` solo tiene `SELECT` con RLS y la clave `secret` solo la usa la ingesta.
