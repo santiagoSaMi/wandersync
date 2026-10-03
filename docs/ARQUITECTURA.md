@@ -107,11 +107,23 @@ Elegí **orquestación** (no coreografía): el flujo completo vive en `services/
 
 | # | Paso | Servicio | Compensación (orden inverso) |
 |---|---|---|---|
-| 1 | `PAYMENT` cobro simulado | orders (local) | reembolso |
+| 1 | `PAYMENT` débito de la **billetera** del usuario | orders (local) | reembolso a la billetera |
 | 2 | `FLIGHT` reserva de vuelo | flights | cancelar reserva |
 | 3 | `HOTEL` reserva de hotel | hotels | cancelar reserva |
 | 4 | `CAR` reserva de auto | cars | cancelar reserva |
 | 5 | `INVOICE` factura | orders (local) | anular factura |
+
+### Billetera del usuario (el dinero que mueve la SAGA)
+
+Cada usuario recibe una billetera de **US$ 5.000** al registrarse (`wallets` en `orders_db`). El paso `PAYMENT` la **debita** y su compensación la **reembolsa**; todo queda en un libro mayor de solo-agregar (`wallet_movements`: apertura, débito, reembolso, ajuste, con el saldo resultante).
+
+| Garantía | Cómo |
+|---|---|
+| No se gasta dos veces el mismo saldo | El débito es **un UPDATE condicional**: `SET balance = balance - x WHERE balance >= x RETURNING balance`. Comprobar y restar es atómico: 0 filas ⇒ saldo insuficiente, aunque dos reservas compitan |
+| Ni débito ni reembolso dos veces | `UNIQUE(order_id, kind)` en el libro mayor + estado del pago (`CAPTURED`/`REFUNDED`): reintentos y recuperaciones no mueven dinero de más |
+| Atomicidad | Saldo, movimiento y pago se confirman en **una** transacción (o no se confirma nada) |
+| Validación de saldo | **Dos capas**: antes de crear la orden (`409 insufficient_funds` → `INSUFFICIENT_FUNDS` en GraphQL, sin orden creada) y de nuevo dentro del `PAYMENT` (paso definitivo, sin reintentos) |
+| Visible en la demo | Chip de saldo en la cabecera, panel "Tu billetera" en vivo durante la SAGA (−débito / +reembolso), montos en los pasos de la línea de tiempo y libro mayor en *Mis reservas* |
 
 ### Máquina de estados de la orden
 

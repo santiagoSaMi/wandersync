@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from . import wallet as wallets
 from .models import Invoice, Order, Payment, now
 from .saga import StepError
 
@@ -103,27 +104,39 @@ class OrderActions:
 
     # ------------------------------------------------------------------ pasos locales
     async def _charge(self, order: Order) -> None:
+        """PAGO = débito de la billetera del usuario. Saldo, libro mayor y pago se confirman en UNA transacción."""
         if self._should_fail(order, "PAYMENT"):
             raise StepError("Pago rechazado (fallo simulado)")
         async with self.sf() as s:
-            existing = (await s.execute(select(Payment).where(Payment.order_id == order.id))).scalar_one_or_none()
+            existing = await wallets.captured_payment(s, order.id)
             if existing is not None:
                 if existing.status == "CAPTURED":
-                    return                      # idempotente
+                    return                      # idempotente: ya se cobró
                 raise StepError("el pago de esta orden ya fue reembolsado")
+            try:
+                await wallets.debit(s, order.user_id, order.id, order.total_cents, order.currency)
+            except wallets.InsufficientFunds as exc:
+                raise StepError(str(exc)) from None          # definitivo: no se reintenta
             s.add(Payment(order_id=order.id, amount_cents=order.total_cents, currency=order.currency,
                           status="CAPTURED"))
             try:
                 await s.commit()
-            except IntegrityError:
+            except IntegrityError:              # otra ejecución concurrente ya cobró esta orden
                 await s.rollback()
 
     async def _refund(self, order_id: str) -> None:
+        """Compensación del PAGO: devuelve el dinero a la billetera (si se llegó a cobrar)."""
         async with self.sf() as s:
-            pay = (await s.execute(select(Payment).where(Payment.order_id == order_id))).scalar_one_or_none()
-            if pay is not None and pay.status == "CAPTURED":
-                pay.status, pay.updated_at = "REFUNDED", now()
-                await s.commit()                # si no hubo pago, no hay nada que reembolsar
+            pay = await wallets.captured_payment(s, order_id, lock=True)
+            if pay is None or pay.status != "CAPTURED":
+                return                          # no hubo cobro (o ya se reembolsó): nada que devolver
+            order = await s.get(Order, order_id)
+            await wallets.refund(s, order.user_id, order_id, pay.amount_cents)
+            pay.status, pay.updated_at = "REFUNDED", now()
+            try:
+                await s.commit()
+            except IntegrityError:              # el reembolso ya quedó registrado por otra ejecución
+                await s.rollback()
 
     async def _issue_invoice(self, order: Order) -> None:
         async with self.sf() as s:

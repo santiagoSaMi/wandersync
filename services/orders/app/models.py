@@ -70,6 +70,32 @@ class Payment(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
+class Wallet(Base):
+    """Billetera del usuario: el PAGO de la SAGA la debita y la compensación la reembolsa."""
+    __tablename__ = "wallets"
+
+    user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    balance_cents: Mapped[int] = mapped_column(Integer)
+    currency: Mapped[str] = mapped_column(String(3))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class WalletMovement(Base):
+    """Libro mayor (solo se agrega): apertura, débitos, reembolsos y ajustes, con el saldo resultante.
+    UNIQUE(order_id, kind): una orden se debita y se reembolsa como máximo UNA vez (idempotencia)."""
+    __tablename__ = "wallet_movements"
+    __table_args__ = (UniqueConstraint("order_id", "kind", name="uq_wallet_movement_order_kind"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(64), index=True)
+    order_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    kind: Mapped[str] = mapped_column(String(12))              # OPENING | DEBIT | REFUND | ADJUSTMENT
+    amount_cents: Mapped[int] = mapped_column(Integer)         # con signo: -débito, +reembolso
+    balance_after_cents: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
 class Invoice(Base):
     __tablename__ = "invoices"
 

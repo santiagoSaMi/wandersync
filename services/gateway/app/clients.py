@@ -231,6 +231,12 @@ class OrdersApi(InternalApi):
         r = await self._send("POST", "/orders", json=payload)
         if r.status_code in (200, 201, 202):        # 202: la SAGA sigue; la orden vuelve PENDING y el cliente consulta
             return r.json()
+        if r.status_code == 409 and isinstance((detail := r.json().get("detail")), dict) \
+                and detail.get("code") == "insufficient_funds":
+            raise gql_error(
+                f"Saldo insuficiente: tienes {_usd(detail['balance_cents'])} en tu billetera y el paquete cuesta "
+                f"{_usd(detail['required_cents'])}.", "INSUFFICIENT_FUNDS",
+                balanceCents=detail["balance_cents"], requiredCents=detail["required_cents"])
         log.error("orders.create HTTP %s %s", r.status_code, r.text[:300])
         raise gql_error("No se pudo procesar la reserva.", "SERVICE_ERROR")
 
@@ -247,3 +253,25 @@ class OrdersApi(InternalApi):
         r = await self._send("GET", "/orders", params={"user_id": user_id, "include_steps": str(include_steps).lower()})
         r.raise_for_status()
         return r.json()
+
+    # ------------------------------------------------------------------ billetera
+    async def wallet(self, user_id: str) -> dict:
+        r = await self._send("GET", f"/wallets/{user_id}")
+        r.raise_for_status()
+        return r.json()
+
+    async def open_wallet(self, user_id: str) -> dict:
+        r = await self._send("POST", f"/wallets/{user_id}")
+        r.raise_for_status()
+        return r.json()
+
+    async def demo_set_balance(self, user_id: str, balance_cents: int) -> dict:
+        r = await self._send("POST", f"/wallets/{user_id}/demo-balance", json={"balance_cents": balance_cents})
+        if r.status_code == 403:
+            raise gql_error("El modo demostración está desactivado.", "DEMO_DISABLED")
+        r.raise_for_status()
+        return r.json()
+
+
+def _usd(cents: int) -> str:
+    return f"US$ {cents / 100:,.2f}"

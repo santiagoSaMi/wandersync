@@ -80,6 +80,18 @@ def main() -> int:
 
     mutation = f"mutation($i: BookingInput!) {{ createBooking(input: $i) {{ {ORDER_FIELDS} }} }}"
 
+    def balance() -> int:
+        return c.gql("query { wallet { balanceCents } }", cookie=sid)[2]["data"]["wallet"]["balanceCents"]
+
+    def money(cents: int) -> str:
+        return f"US$ {cents / 100:,.2f}"
+
+    def wallet_line(before: int) -> None:
+        after = balance()
+        delta = after - before
+        how = "sin cambios (la SAGA devolvió el dinero)" if delta == 0 else f"{'+' if delta > 0 else '-'}{money(abs(delta))}"
+        print(f"   billetera: {money(before)} -> {money(after)}  ({how})")
+
     def book(pkg, fail=None):
         r = c.gql(mutation, {"i": {"flightOfferId": pkg["flight"]["id"], "hotelOfferId": pkg["hotel"]["id"],
                                    "carOfferId": pkg["car"]["id"], "idempotencyKey": str(uuid.uuid4()),
@@ -105,12 +117,18 @@ def main() -> int:
         return {"data": {"createBooking": order}} if order else r
 
     print("\n3) Reserva SIN fallos (camino feliz)")
+    before = balance()
+    print(f"   billetera antes: {money(before)}")
     r = book(pkgs[0])
     show(r["data"]["createBooking"], steps=not args.slow) if r.get("data") else print("   error:", r["errors"][0]["message"])
+    wallet_line(before)
 
     print(f"\n4) Reserva forzando un fallo en {args.fail} (la SAGA debe compensar)")
+    before = balance()
+    print(f"   billetera antes: {money(before)}")
     r = book(pkgs[1], args.fail)
     show(r["data"]["createBooking"], steps=not args.slow) if r.get("data") else print("   error:", r["errors"][0]["message"])
+    wallet_line(before)
     return 0
 
 

@@ -1,8 +1,9 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MockedProvider } from "@apollo/client/testing";
 import { createCache } from "../apollo.js";
-import { CREATE_BOOKING, ORDER } from "../graphql.js";
+import { CREATE_BOOKING, ORDER, WALLET } from "../graphql.js";
+import { money, signedMoney } from "../format.js";
 import CheckoutDialog from "./CheckoutDialog.jsx";
 
 vi.mock("../format.js", async (original) => ({ ...(await original()), newIdempotencyKey: () => "key-12345678" }));
@@ -15,6 +16,11 @@ beforeAll(() => {
 
 // Sin `globals` en vitest, Testing Library no limpia el DOM sola: sin esto un test vería el diálogo del anterior.
 afterEach(cleanup);
+
+// Intl separa "US$" del número con un espacio duro (U+00A0); Testing Library normaliza el texto de la página
+// a espacios simples pero no el texto esperado: se normaliza aquí igual.
+const nb = (s) => s.replace(/\u00a0/g, " ");
+
 
 const PKG = {
   currency: "USD", nights: 3, totalPriceCents: 60000,
@@ -49,6 +55,11 @@ function pollMocks(counter, ...results) {
     request: { query: ORDER, variables: { id: "o1" } },
     result: () => { counter.calls += 1; return { data: { order: o } }; },
   }));
+}
+
+function walletMocks(balanceCents, times = 3) {
+  const result = { data: { wallet: { __typename: "Wallet", id: "u1", balanceCents, currency: "USD", movements: [] } } };
+  return Array.from({ length: times }, () => ({ request: { query: WALLET }, result }));
 }
 
 const renderDialog = (mocks) =>
@@ -114,4 +125,44 @@ describe("CheckoutDialog", () => {
     await sleep(2000);
     expect(polls.calls).toBe(0);
   }, 10000);
+
+  it("sin saldo suficiente lo advierte y no deja pagar", async () => {
+    renderDialog([...walletMocks(10000)]);                          // US$ 100 vs. paquete de US$ 600
+    await screen.findByText(/Saldo insuficiente/);
+    expect(screen.getByRole("button", { name: /Pagar/ }).disabled).toBe(true);
+  });
+
+  it("con saldo muestra cuánto queda después de pagar", async () => {
+    renderDialog([...walletMocks(500000)]);
+    await screen.findByText("Pagas con tu billetera");
+    expect(screen.getByText(nb(money(440000, "USD", { exact: true })))).toBeTruthy();   // 5.000 - 600
+    expect(screen.getByRole("button", { name: /Pagar/ }).disabled).toBe(false);
+  });
+
+  it("la billetera se debita al pagar y se reembolsa al compensar, en vivo", async () => {
+    const polls = { calls: 0 };
+    const debited = [step("PAYMENT", "COMPLETED"), step("FLIGHT", "STARTED")];
+    const reverted = [step("PAYMENT", "COMPLETED"), step("CAR", "FAILED"), step("PAYMENT", "COMPLETED", "COMPENSATE")];
+    renderDialog([
+      ...walletMocks(500000),
+      bookingMock(order("PENDING", []), "CAR", true),
+      ...pollMocks(polls, order("PENDING", []), order("PENDING", debited), order("CANCELLED", reverted)),
+    ]);
+    await screen.findByText("Pagas con tu billetera");
+    fireEvent.click(screen.getByLabelText("La reserva del auto"));
+    fireEvent.click(screen.getByLabelText(/paso a paso/));
+    fireEvent.click(screen.getByText(/Pagar/));
+
+    const panel = await screen.findByRole("region", { name: "Tu billetera" });
+    expect(within(panel).getByText(/Esperando el paso de pago/)).toBeTruthy();
+    await within(panel).findByText("Pago de la reserva", {}, { timeout: 4000 });      // débito
+    expect(within(panel).getByText(nb(signedMoney(-60000, "USD")))).toBeTruthy();
+    await within(panel).findByText(nb(money(440000, "USD", { exact: true })), {}, { timeout: 3000 });
+    await within(panel).findByText("Reembolso por compensación", {}, { timeout: 4000 });   // compensación
+    expect(within(panel).getByText(nb(signedMoney(60000, "USD")))).toBeTruthy();
+    await within(panel).findAllByText(nb(money(500000, "USD", { exact: true })), {}, { timeout: 3000 });
+    await screen.findByText(/Revertimos todo/);
+    // la línea de tiempo también muestra el dinero en el paso de pago y en su reembolso
+    expect(screen.getAllByText(nb(signedMoney(-60000, "USD"))).length).toBeGreaterThanOrEqual(2);
+  }, 20000);
 });

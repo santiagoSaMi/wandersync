@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@apollo/client";
 import { AnimatePresence, motion } from "motion/react";
-import { BedDouble, Car, CircleAlert, CircleCheck, ExternalLink, FlaskConical, LoaderCircle, Lock, Plane, ShieldCheck, Undo2, Workflow } from "lucide-react";
-import { CREATE_BOOKING, FINAL_ORDER_STATUSES, ORDER } from "../graphql.js";
-import { errorText, money, newIdempotencyKey } from "../format.js";
+import { ArrowDownRight, ArrowRight, BedDouble, Car, CircleAlert, CircleCheck, ExternalLink, FlaskConical, LoaderCircle, Lock, Plane, ShieldCheck, Undo2, Wallet, Workflow } from "lucide-react";
+import { CREATE_BOOKING, FINAL_ORDER_STATUSES, ORDER, WALLET } from "../graphql.js";
+import { errorText, money, newIdempotencyKey, signedMoney } from "../format.js";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import AnimatedMoney from "./AnimatedMoney.jsx";
 import Dialog from "./Dialog.jsx";
 import SagaTimeline from "./SagaTimeline.jsx";
 
@@ -36,6 +37,41 @@ function Alert({ tone, icon: Icon, children }) {
   );
 }
 
+// Billetera EN VIVO durante la SAGA: el saldo baja cuando el PAGO se completa y vuelve si la compensación
+// lo reembolsa. Se deriva de los pasos de la orden (los mismos que la línea de tiempo), sin consultas extra.
+function LiveWallet({ startCents, totalCents, currency, steps }) {
+  const done = (phase) => steps.some((s) => s.name === "PAYMENT" && s.phase === phase && s.status === "COMPLETED");
+  const debited = done("EXECUTE");
+  const refunded = debited && done("COMPENSATE");
+  const balance = startCents - (debited ? totalCents : 0) + (refunded ? totalCents : 0);
+  const lines = [];
+  if (debited) lines.push(["debit", ArrowDownRight, "Pago de la reserva", -totalCents]);
+  if (refunded) lines.push(["refund", Undo2, "Reembolso por compensación", totalCents]);
+  return (
+    <section aria-label="Tu billetera" className="rounded-xl border bg-secondary/40 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex items-center gap-2 text-sm font-medium"><Wallet className="size-4 text-coral" aria-hidden="true" />Tu billetera</span>
+        <span className="font-serif text-2xl leading-none"><AnimatedMoney cents={balance} currency={currency} /></span>
+      </div>
+      <ol className="mt-3 space-y-1.5 text-sm">
+        <li className="flex justify-between text-muted-foreground">
+          <span>Saldo antes de reservar</span><span className="font-mono tabular-nums">{money(startCents, currency, { exact: true })}</span>
+        </li>
+        <AnimatePresence initial={false}>
+          {lines.map(([key, Icon, label, cents]) => (
+            <motion.li key={key} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
+              className={cn("flex items-center justify-between font-medium", cents < 0 ? "text-destructive" : "text-success")}>
+              <span className="flex items-center gap-1.5"><Icon className="size-4" aria-hidden="true" />{label}</span>
+              <span className="font-mono tabular-nums">{signedMoney(cents, currency)}</span>
+            </motion.li>
+          ))}
+        </AnimatePresence>
+        {!debited && <li className="text-xs text-muted-foreground">Esperando el paso de pago…</li>}
+      </ol>
+    </section>
+  );
+}
+
 export default function CheckoutDialog({ pkg, onClose, onViewOrders }) {
   const [failure, setFailure] = useState("NONE");
   const [slowMotion, setSlowMotion] = useState(false);   // modo presentación: la SAGA avanza paso a paso
@@ -54,6 +90,17 @@ export default function CheckoutDialog({ pkg, onClose, onViewOrders }) {
   useEffect(() => {
     if (polled?.order) setOrder(polled.order);
   }, [polled]);
+
+  // Billetera: saldo antes de pagar (validación en pantalla) y refresco al terminar la SAGA (o si se rechazó).
+  const { data: walletData, refetch: refetchWallet } = useQuery(WALLET, { fetchPolicy: "cache-and-network" });
+  const wallet = walletData?.wallet;
+  const startRef = useRef(null);
+  if (!order && wallet) startRef.current = wallet.balanceCents;
+  const insufficient = !order && wallet != null && wallet.balanceCents < pkg.totalPriceCents;
+  const finished = order != null && FINAL_ORDER_STATUSES.has(order.status);
+  useEffect(() => {
+    if (finished || error) refetchWallet().catch(() => {});
+  }, [finished, error, refetchWallet]);
 
   async function submit() {
     try {
@@ -108,6 +155,28 @@ export default function CheckoutDialog({ pkg, onClose, onViewOrders }) {
               </li>
             </ul>
 
+            {wallet && (
+              <div className={cn("flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border px-4 py-3 text-sm",
+                insufficient ? "border-destructive/30 bg-destructive/8" : "bg-card")}>
+                <span className="flex items-center gap-2 font-medium"><Wallet className="size-4 text-coral" aria-hidden="true" />Pagas con tu billetera</span>
+                <span className="ml-auto flex items-center gap-2 font-mono tabular-nums">
+                  {money(wallet.balanceCents, wallet.currency, { exact: true })}
+                  {!insufficient && (
+                    <>
+                      <ArrowRight className="size-4 text-muted-foreground" aria-hidden="true" />
+                      <span className="font-semibold">{money(wallet.balanceCents - pkg.totalPriceCents, wallet.currency, { exact: true })}</span>
+                    </>
+                  )}
+                </span>
+                {insufficient && (
+                  <p className="flex w-full items-start gap-2 text-destructive" role="alert">
+                    <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                    Saldo insuficiente: tu billetera no alcanza para este paquete. Elige uno más económico o ajusta el saldo en Mis reservas (modo demostración).
+                  </p>
+                )}
+              </div>
+            )}
+
             <fieldset className="rounded-xl border border-dashed p-4">
               <legend className="flex items-center gap-1.5 px-1.5 text-sm font-medium">
                 <FlaskConical className="size-4 text-coral" aria-hidden="true" />
@@ -144,7 +213,7 @@ export default function CheckoutDialog({ pkg, onClose, onViewOrders }) {
             </p>
             <div className={ACTION_BAR}>
               <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-              <Button variant="coral" size="lg" onClick={submit} disabled={loading}>
+              <Button variant="coral" size="lg" onClick={submit} disabled={loading || insufficient}>
                 {loading ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Lock aria-hidden="true" />}
                 {loading ? "Procesando reserva…" : `Pagar ${money(pkg.totalPriceCents, pkg.currency)} y reservar`}
               </Button>
@@ -166,9 +235,12 @@ export default function CheckoutDialog({ pkg, onClose, onViewOrders }) {
             ) : (
               <Alert tone="warn" icon={Undo2}>
                 {order.status === "CANCELLED"
-                  ? "No pudimos completar tu reserva. Revertimos todo lo que se había hecho y no se te cobra nada."
+                  ? "No pudimos completar tu reserva. Revertimos todo lo que se había hecho y el dinero volvió a tu billetera."
                   : "La reserva no se completó y alguna reversión sigue pendiente. El sistema la reintentará automáticamente."}
               </Alert>
+            )}
+            {startRef.current != null && (
+              <LiveWallet startCents={startRef.current} totalCents={order.totalCents} currency={order.currency} steps={order.steps} />
             )}
             {/* Cada SAGA se refleja en Prefect como el flow run "SAGA reserva <orden>" (grafo con flechas, en vivo) */}
             <a href="http://localhost:4200/runs" target="_blank" rel="noreferrer"
@@ -180,7 +252,7 @@ export default function CheckoutDialog({ pkg, onClose, onViewOrders }) {
               </span>
               <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             </a>
-            <SagaTimeline steps={order.steps} />
+            <SagaTimeline steps={order.steps} payment={{ amountCents: order.totalCents, currency: order.currency }} />
             <div className={ACTION_BAR}>
               {!processing && order.status !== "CONFIRMED" && <Button variant="outline" onClick={retry}>Intentar de nuevo</Button>}
               <Button variant="ghost" onClick={onClose}>Cerrar</Button>

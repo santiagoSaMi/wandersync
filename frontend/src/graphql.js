@@ -85,3 +85,16 @@ export const CREATE_BOOKING = gql`
     createBooking(input: $input) { ...OrderFields }
   }
 `;
+
+// Billetera: el PAGO de la SAGA la debita y la compensación la reembolsa. `id` = usuario (Apollo la normaliza).
+export const WALLET = gql`
+  query Wallet {
+    wallet { id balanceCents currency movements { kind amountCents balanceAfterCents orderId createdAt } }
+  }
+`;
+
+export const DEMO_SET_WALLET = gql`
+  mutation DemoSetWallet($cents: Int!) {
+    demoSetWalletBalance(balanceCents: $cents) { id balanceCents currency movements { kind amountCents balanceAfterCents orderId createdAt } }
+  }
+`;

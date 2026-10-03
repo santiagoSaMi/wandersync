@@ -209,6 +209,31 @@ class Order:
                    for s in o["steps"]])
 
 
+# ------------------------------------------------------------------ billetera
+@strawberry.type
+class WalletMovement:
+    kind: str = strawberry.field(description="OPENING | DEBIT | REFUND | ADJUSTMENT")
+    amount_cents: int = strawberry.field(description="Con signo: negativo = débito, positivo = abono")
+    balance_after_cents: int
+    order_id: Optional[str]
+    created_at: datetime
+
+
+@strawberry.type(description="Billetera del usuario: el PAGO de la SAGA la debita y la compensación la reembolsa.")
+class Wallet:
+    id: strawberry.ID
+    balance_cents: int
+    currency: str
+    movements: list[WalletMovement]
+
+    @staticmethod
+    def from_api(w: dict) -> "Wallet":
+        return Wallet(id=w["user_id"], balance_cents=w["balance_cents"], currency=w["currency"],
+                      movements=[WalletMovement(kind=m["kind"], amount_cents=m["amount_cents"],
+                                                balance_after_cents=m["balance_after_cents"], order_id=m.get("order_id"),
+                                                created_at=_dt(m["created_at"])) for m in w["movements"]])
+
+
 # ------------------------------------------------------------------ entradas
 @strawberry.input
 class RegisterInput:

@@ -1,7 +1,17 @@
 const moneyFmt = {};
-export function money(cents, currency = "USD") {
-  moneyFmt[currency] ??= new Intl.NumberFormat("es-CO", { style: "currency", currency, maximumFractionDigits: 0 });
-  return moneyFmt[currency].format(cents / 100);
+// Siempre con centavos: con la billetera, el precio mostrado debe coincidir al centavo con lo que se debita.
+// ({ exact: false } redondea a unidades, por si algún resumen compacto lo necesitara.)
+export function money(cents, currency = "USD", { exact = true } = {}) {
+  const key = `${currency}:${exact}`;
+  moneyFmt[key] ??= new Intl.NumberFormat("es-CO", exact
+    ? { style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }
+    : { style: "currency", currency, maximumFractionDigits: 0 });
+  return moneyFmt[key].format(cents / 100);
+}
+
+// Monto con signo explícito para movimientos de la billetera: "−US$ 342,00" / "+US$ 342,00".
+export function signedMoney(cents, currency = "USD") {
+  return `${cents < 0 ? "−" : "+"}${money(Math.abs(cents), currency, { exact: true })}`;
 }
 
 export function dayLabel(iso) {

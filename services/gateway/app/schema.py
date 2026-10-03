@@ -22,7 +22,7 @@ from .deps import auth_api, catalog, orders_api
 from .packages import compose_packages
 from .selection import child_selections, requested_columns
 from .trace import SupabaseTrace
-from .types import (BookingInput, CarOffer, CatalogStatus, FlightOffer, HotelOffer, LoginInput, Order,
+from .types import (BookingInput, CarOffer, CatalogStatus, FlightOffer, HotelOffer, LoginInput, Order, Wallet,
                     Package, RegisterInput, Route, User)
 
 log = logging.getLogger("gateway.schema")
@@ -123,6 +123,12 @@ class Query:
         user = (await info.context.session()).user
         return User(id=user["id"], email=user["email"], full_name=user["full_name"]) if user else None
 
+    @strawberry.field(permission_classes=[IsAuthenticated],
+                      description="Billetera del usuario (US$ 5.000 al registrarse) y sus últimos movimientos.")
+    async def wallet(self, info: Info[Context, None]) -> Wallet:
+        user = (await info.context.session()).user
+        return Wallet.from_api(await orders_api.wallet(user["id"]))
+
     @strawberry.field(permission_classes=[IsAuthenticated])
     async def my_orders(self, info: Info[Context, None]) -> list[Order]:
         user = (await info.context.session()).user
@@ -161,7 +167,12 @@ class Mutation:
         ctx = info.context
         await ctx.rate_limit("register")
         await auth_api.register(input.email.strip().lower(), input.password, input.full_name)
-        return await _login(ctx, input.email, input.password)
+        user = await _login(ctx, input.email, input.password)
+        try:                                   # billetera con US$ 5.000 desde el registro (si falla, se abre al usarla)
+            await orders_api.open_wallet(str(user.id))
+        except Exception:
+            log.warning("no se pudo abrir la billetera de user=%s al registrarse; se abrirá al usarla", user.id)
+        return user
 
     @strawberry.mutation
     async def login(self, info: Info[Context, None], input: LoginInput) -> User:
@@ -177,6 +188,16 @@ class Mutation:
             await auth_api.logout(sid)
         ctx.clear_session_cookie()
         return True
+
+    @strawberry.mutation(permission_classes=[IsAuthenticated],
+                         description="Solo demostración: fija el saldo de tu billetera (p. ej. para mostrar saldo insuficiente).")
+    async def demo_set_wallet_balance(self, info: Info[Context, None], balance_cents: int) -> Wallet:
+        if not settings.allow_failure_simulation:
+            raise gql_error("El modo demostración está desactivado.", "DEMO_DISABLED")
+        if not 0 <= balance_cents <= 1_000_000_000:
+            raise gql_error("Saldo fuera de rango.", "INVALID_ARGUMENT")
+        user = (await info.context.session()).user
+        return Wallet.from_api(await orders_api.demo_set_balance(user["id"], balance_cents))
 
     @strawberry.mutation(permission_classes=[IsAuthenticated],
                          description="Crea la reserva: ejecuta la SAGA (pago, vuelo, hotel, auto, factura).")

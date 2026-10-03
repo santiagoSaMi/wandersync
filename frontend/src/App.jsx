@@ -3,9 +3,9 @@ import { useLazyQuery, useMutation, useQuery } from "@apollo/client";
 import { useLenis } from "lenis/react";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  CircleAlert, Compass, Database, ExternalLink, LogOut, Network, RefreshCw, SearchX, Sparkles, Terminal, Ticket, Workflow,
+  CircleAlert, Compass, Database, ExternalLink, LogOut, Network, RefreshCw, SearchX, Sparkles, Terminal, Ticket, Wallet, Workflow,
 } from "lucide-react";
-import { CATALOG, LOGOUT, ME, PACKAGES } from "./graphql.js";
+import { CATALOG, LOGOUT, ME, PACKAGES, WALLET } from "./graphql.js";
 import { dayLabel, errorText, timeAgo } from "./format.js";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,8 @@ import PackageTicket from "./components/PackageTicket.jsx";
 import CheckoutDialog from "./components/CheckoutDialog.jsx";
 import AuthDialog from "./components/AuthDialog.jsx";
 import OrdersView from "./components/OrdersView.jsx";
+import WalletPanel from "./components/WalletPanel.jsx";
+import AnimatedMoney from "./components/AnimatedMoney.jsx";
 import FlightArc from "./components/FlightArc.jsx";
 
 function useScrolled(threshold = 24) {
@@ -28,6 +30,22 @@ function useScrolled(threshold = 24) {
     return () => window.removeEventListener("scroll", onScroll);
   }, [threshold]);
   return scrolled;
+}
+
+// Saldo de la billetera en la cabecera: se actualiza solo (Apollo normaliza Wallet por id) cuando la SAGA
+// debita o reembolsa, y lleva a Mis reservas, donde está el detalle de movimientos.
+function WalletChip({ overHero, onClick }) {
+  const { data } = useQuery(WALLET, { fetchPolicy: "cache-and-network" });
+  const wallet = data?.wallet;
+  if (!wallet) return null;
+  return (
+    <button type="button" onClick={onClick} aria-label="Ver mi billetera"
+      className={cn("inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
+        overHero ? "border-white/15 bg-white/10 text-white hover:bg-white/20" : "bg-card hover:bg-secondary")}>
+      <Wallet className="size-4 text-coral" aria-hidden="true" />
+      <AnimatedMoney cents={wallet.balanceCents} currency={wallet.currency} className="font-mono text-[13px]" />
+    </button>
+  );
 }
 
 function initials(name = "") {
@@ -112,6 +130,7 @@ export default function App() {
           <nav className="flex items-center gap-1 sm:gap-2" aria-label="Principal">
             <button type="button" className={cn(navLink(view === "search"), "hidden sm:inline-flex")} onClick={() => go("search")}>Buscar</button>
             {me && <button type="button" className={navLink(view === "orders")} onClick={() => go("orders")}>Mis reservas</button>}
+            {me && <WalletChip overHero={overHero} onClick={() => go("orders")} />}
             {me ? (
               <span className="ml-1 flex items-center gap-2">
                 <span className={cn("hidden items-center gap-2 text-sm md:flex", overHero ? "text-white/90" : "text-foreground")}>
@@ -254,9 +273,12 @@ export default function App() {
               <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-coral">Tu cuenta</p>
                 <h2 className="mt-1 font-serif text-5xl leading-tight">Mis reservas</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Cada reserva muestra los pasos de la SAGA que la confirmaron o la revirtieron.</p>
+                <p className="mt-1 text-sm text-muted-foreground">Tu billetera y cada reserva, con los pasos de la SAGA que la confirmaron o la revirtieron.</p>
               </motion.div>
-              <OrdersView />
+              <div className="space-y-8">
+                <WalletPanel />
+                <OrdersView />
+              </div>
             </div>
           </section>
         )}

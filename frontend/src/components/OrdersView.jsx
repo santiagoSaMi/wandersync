@@ -95,7 +95,7 @@ export default function OrdersView() {
                       );
                     })}
                   </ul>
-                  <SagaTimeline steps={o.steps} />
+                  <SagaTimeline steps={o.steps} payment={{ amountCents: o.totalCents, currency: o.currency }} />
                 </div>
               </details>
             </Card>

@@ -1,10 +1,11 @@
 import { AnimatePresence, motion } from "motion/react";
 import { BedDouble, Car, Check, CreditCard, LoaderCircle, Plane, Receipt, Undo2, X } from "lucide-react";
+import { signedMoney } from "../format.js";
 import { cn } from "@/lib/utils";
 
-const LABEL = { PAYMENT: "Pago", FLIGHT: "Reserva del vuelo", HOTEL: "Reserva del hotel", CAR: "Reserva del auto", INVOICE: "Factura" };
+const LABEL = { PAYMENT: "Pago con la billetera", FLIGHT: "Reserva del vuelo", HOTEL: "Reserva del hotel", CAR: "Reserva del auto", INVOICE: "Factura" };
 const UNDO = {
-  PAYMENT: "Reembolso del pago",
+  PAYMENT: "Reembolso a la billetera",
   FLIGHT: "Cancelación del vuelo",
   HOTEL: "Cancelación del hotel",
   CAR: "Cancelación del auto",
@@ -20,7 +21,7 @@ const TONE = {
   run: { node: "bg-coral text-white ring-coral/25", text: "text-coral" },
 };
 
-function Step({ step, undo, last }) {
+function Step({ step, undo, last, amount }) {
   const done = step.status === "COMPLETED";
   const failed = step.status === "FAILED";
   const tone = failed ? "bad" : done ? (undo ? "undo" : "good") : "run";
@@ -47,6 +48,13 @@ function Step({ step, undo, last }) {
           <ServiceIcon className="size-4 text-muted-foreground" aria-hidden="true" />
           <strong className="font-medium">{(undo ? UNDO : LABEL)[step.name]}</strong>
           <span className={cn("text-xs font-semibold uppercase tracking-wider", TONE[tone].text)}>{status}</span>
+          {amount && (
+            <motion.span initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
+              className={cn("ml-auto rounded-full px-2 py-0.5 font-mono text-xs font-semibold tabular-nums",
+                amount.cents < 0 ? "bg-destructive/10 text-destructive" : "bg-success/12 text-success")}>
+              {signedMoney(amount.cents, amount.currency)}
+            </motion.span>
+          )}
         </div>
         {step.attempts > 1 && <div className="mt-1 text-xs text-muted-foreground">{step.attempts} intentos</div>}
         {step.error && (
@@ -57,12 +65,18 @@ function Step({ step, undo, last }) {
   );
 }
 
-export default function SagaTimeline({ steps }) {
+// payment = { amountCents, currency }: muestra el dinero que el PAGO debitó y que su compensación devolvió.
+export default function SagaTimeline({ steps, payment }) {
   const forward = steps.filter((s) => s.phase === "EXECUTE");
   const undo = steps.filter((s) => s.phase === "COMPENSATE");
   const completed = forward.filter((s) => s.status === "COMPLETED").length;
   const failed = forward.some((s) => s.status === "FAILED");
   const reverted = undo.filter((s) => s.status === "COMPLETED").length;
+  const debited = forward.some((s) => s.name === "PAYMENT" && s.status === "COMPLETED");
+  const amountFor = (s, isUndo) => {
+    if (!payment || s.name !== "PAYMENT" || s.status !== "COMPLETED" || !debited) return null;
+    return { cents: isUndo ? payment.amountCents : -payment.amountCents, currency: payment.currency };
+  };
   const pct = failed ? (undo.length ? (reverted / undo.length) * 100 : 0) : (completed / TOTAL_STEPS) * 100;
 
   return (
@@ -86,7 +100,7 @@ export default function SagaTimeline({ steps }) {
 
       <ol className="rounded-xl border bg-secondary/40 p-4" aria-label="Pasos de la reserva">
         <AnimatePresence initial={false}>
-          {forward.map((s, i) => <Step key={`${s.name}-${s.phase}`} step={s} last={i === forward.length - 1} />)}
+          {forward.map((s, i) => <Step key={`${s.name}-${s.phase}`} step={s} last={i === forward.length - 1} amount={amountFor(s, false)} />)}
         </AnimatePresence>
       </ol>
 
@@ -99,7 +113,7 @@ export default function SagaTimeline({ steps }) {
             </p>
             <ol className="rounded-xl border border-warning/30 bg-warning/6 p-4" aria-label="Pasos de reversión">
               <AnimatePresence initial={false}>
-                {undo.map((s, i) => <Step key={`${s.name}-${s.phase}`} step={s} undo last={i === undo.length - 1} />)}
+                {undo.map((s, i) => <Step key={`${s.name}-${s.phase}`} step={s} undo last={i === undo.length - 1} amount={amountFor(s, true)} />)}
               </AnimatePresence>
             </ol>
           </motion.div>

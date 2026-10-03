@@ -18,7 +18,7 @@ Documentación técnica con diagramas de secuencia de la SAGA: [`docs/ARQUITECTU
 
 | Qué | Estado |
 |---|---|
-| Tests sin Docker: parsers, motor SAGA y su runner, OrderActions (reintentos), API de orders (idempotencia, anti-IDOR, compensación), auth (Argon2id, bloqueo, session fixation), contrato de flights/hotels/cars, gateway (`createBooking`, límites de consulta, IP del cliente) y frontend (sondeo del checkout) | **153 tests pasan** (`make test`; los de integración requieren `pip install -r requirements-test.txt` + requirements de los servicios y `npm install` en `frontend/`; sin ellos se omiten, y en CI, con `REQUIRE_TEST_DEPS=1`, fallarían) |
+| Tests sin Docker: parsers, motor SAGA y su runner, OrderActions (reintentos), API de orders (idempotencia, anti-IDOR, compensación), auth (Argon2id, bloqueo, session fixation), contrato de flights/hotels/cars, gateway (`createBooking`, límites de consulta, IP del cliente) y frontend (sondeo del checkout) | **177 tests pasan** (`make test`; los de integración requieren `pip install -r requirements-test.txt` + requirements de los servicios y `npm install` en `frontend/`; sin ellos se omiten, y en CI, con `REQUIRE_TEST_DEPS=1`, fallarían) |
 | `docker compose up` completo (14 servicios sanos) | **Verificado** (2026-10-03) |
 | Ingesta Prefect + Dask contra Supabase real: grafo con flechas, reintentos, artefactos, cron cada 30 min | **Verificado**: 120 consultas, 3 workers, ~2.600 ofertas cargadas |
 | GraphQL de punta a punta (nginx → gateway → Supabase), sin over-fetching visible en `extensions.supabase` | **Verificado** con datos reales |
@@ -121,6 +121,15 @@ La línea de tiempo muestra Pago ✔, Vuelo ✔, Hotel ✔, Auto ✖ (3 intentos
 unos 2,5 s y luego ✔/✖, y las compensaciones se ven igual, una a una (≈ 12 s el camino feliz, ≈ 20 s con el fallo del auto).
 Ajusta la pausa con `DEMO_STEP_DELAY_MS` en `.env` (máx. 5000; requiere `ALLOW_FAILURE_SIMULATION=true`).
 Respaldo por consola con el mismo efecto: `make demo-slow`.
+
+**El dinero en la SAGA (billetera):** cada usuario empieza con **US$ 5.000** (chip de saldo en la cabecera). En el checkout
+se ve "Pagas con tu billetera: saldo → saldo después del pago". Durante la SAGA (mejor en modo paso a paso) el panel
+*Tu billetera* muestra **−US$ X** cuando se completa el pago y, si falla el auto, **+US$ X** cuando la compensación lo
+devuelve; los pasos de la línea de tiempo llevan el mismo monto. En *Mis reservas* está el libro mayor completo
+(apertura, débitos, reembolsos). **Validación de saldo:** en *Mis reservas → Modo demostración* pulsa
+"Dejar saldo en US$ 100" e intenta reservar: aparece "Saldo insuficiente" y *Pagar* queda deshabilitado (el API también
+lo rechaza sin crear la orden). "Restaurar US$ 5.000" lo deja como al inicio. Por consola, `make demo` imprime el saldo
+antes y después de cada reserva.
 
 **La SAGA en Prefect (con flechas):** cada reserva aparece en http://localhost:4200 → *Runs* como el flow run
 **`SAGA reserva <orden>`** (el diálogo de resultado muestra el id y un enlace). Ábrelo mientras corre en modo paso a paso:

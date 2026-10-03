@@ -6,7 +6,10 @@ import { ApolloClient, HttpLink, InMemoryCache } from "@apollo/client";
 // vigente, así que se reemplaza (sin esto Apollo advierte de posible pérdida de datos en cada sondeo).
 export function createCache() {
   return new InMemoryCache({
-    typePolicies: { Order: { fields: { steps: { merge: false }, items: { merge: false } } } },
+    typePolicies: {
+      Order: { fields: { steps: { merge: false }, items: { merge: false } } },
+      Wallet: { fields: { movements: { merge: false } } },   // cada respuesta trae el libro mayor vigente
+    },
   });
 }
 

@@ -62,3 +62,22 @@ class OrderOut(BaseModel):
     created_at: datetime
     items: list[ItemOut]
     steps: list[StepOut]
+
+
+class WalletMovementOut(BaseModel):
+    kind: str                       # OPENING | DEBIT | REFUND | ADJUSTMENT
+    amount_cents: int               # con signo
+    balance_after_cents: int
+    order_id: str | None
+    created_at: datetime
+
+
+class WalletOut(BaseModel):
+    user_id: str
+    balance_cents: int
+    currency: str
+    movements: list[WalletMovementOut]
+
+
+class DemoBalanceIn(BaseModel):
+    balance_cents: int = Field(ge=0, le=10_000_000_00)

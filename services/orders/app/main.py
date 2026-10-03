@@ -14,18 +14,19 @@ from datetime import timedelta
 from functools import partial
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Response
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from .actions import OrderActions
+from . import wallet as wallets
 from .models import Base, Invoice, Order, SagaStep, now
 from .prefect_mirror import MirroredRepo, PrefectMirror
 from .repo import SqlSagaRepo
 from .runner import SagaRunner
 from .saga import PENDING, SagaEngine
-from .schemas import ItemOut, OrderIn, OrderOut, StepOut
+from .schemas import DemoBalanceIn, ItemOut, OrderIn, OrderOut, StepOut, WalletMovementOut, WalletOut
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("orders")
@@ -186,10 +187,19 @@ async def create_order(body: OrderIn, response: Response):
         if dup:
             response.status_code = 200
             return await _to_out(dup.id)
+        total_cents = body.flight.price_cents + body.hotel.price_cents + body.car.price_cents
+        # Validación previa: sin saldo suficiente no se crea la orden. (El PAGO vuelve a validar con la fila
+        # bloqueada, por si dos reservas compiten por el mismo saldo.)
+        wallet = await wallets.open_wallet(s, body.user_id)
+        await s.commit()                                # la apertura de la billetera, si fue nueva, queda guardada
+        if wallet.balance_cents < total_cents:
+            raise HTTPException(status_code=409, detail={
+                "code": "insufficient_funds", "balance_cents": wallet.balance_cents, "required_cents": total_cents,
+                "message": str(wallets.InsufficientFunds(wallet.balance_cents, total_cents))})
         order = Order(
             user_id=body.user_id, contact_name=body.contact_name, idempotency_key=body.idempotency_key,
             status=PENDING, currency=body.flight.currency.upper(),
-            total_cents=body.flight.price_cents + body.hotel.price_cents + body.car.price_cents,
+            total_cents=total_cents,
             items={"FLIGHT": body.flight.model_dump(), "HOTEL": body.hotel.model_dump(),
                    "CAR": body.car.model_dump()},
             simulate_failure=body.simulate_failure if ALLOW_SIMULATION else None,
@@ -235,3 +245,38 @@ async def list_orders(user_id: str = Query(min_length=1, max_length=64), limit: 
         orders = (await s.execute(select(Order).where(Order.user_id == user_id)
                                   .order_by(Order.created_at.desc()).limit(limit))).scalars().all()
         return await _outputs(s, list(orders), include_steps)
+
+
+# ------------------------------------------------------------------ billetera
+async def _wallet_out(s, wallet, limit: int = 20) -> WalletOut:
+    rows = await wallets.movements(s, wallet.user_id, limit)
+    return WalletOut(user_id=wallet.user_id, balance_cents=wallet.balance_cents, currency=wallet.currency,
+                     movements=[WalletMovementOut(kind=m.kind, amount_cents=m.amount_cents,
+                                                  balance_after_cents=m.balance_after_cents, order_id=m.order_id,
+                                                  created_at=m.created_at) for m in rows])
+
+
+@app.get("/wallets/{user_id}", response_model=WalletOut, dependencies=[Depends(internal_auth)])
+async def get_wallet(user_id: str = Path(min_length=1, max_length=64), limit: int = Query(20, ge=1, le=100)):
+    """Saldo y últimos movimientos. Abre la billetera (US$ 5.000) si el usuario aún no tenía."""
+    async with Session() as s:
+        wallet = await wallets.open_wallet(s, user_id)
+        await s.commit()
+        return await _wallet_out(s, wallet, limit)
+
+
+@app.post("/wallets/{user_id}", response_model=WalletOut, dependencies=[Depends(internal_auth)])
+async def open_wallet(user_id: str = Path(min_length=1, max_length=64)):
+    """Apertura explícita al registrarse (idempotente)."""
+    return await get_wallet(user_id, 20)
+
+
+@app.post("/wallets/{user_id}/demo-balance", response_model=WalletOut, dependencies=[Depends(internal_auth)])
+async def demo_set_balance(body: DemoBalanceIn, user_id: str = Path(min_length=1, max_length=64)):
+    """Solo en modo demostración: fija el saldo para mostrar la validación de saldo insuficiente."""
+    if not ALLOW_SIMULATION:
+        raise HTTPException(status_code=403, detail="demo_mode_disabled")
+    async with Session() as s:
+        wallet = await wallets.set_balance(s, user_id, body.balance_cents)
+        await s.commit()
+        return await _wallet_out(s, wallet)
