@@ -1,0 +1,39 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: >
+          pip install -r requirements-test.txt -r services/auth/requirements.txt -r services/orders/requirements.txt
+          -r services/flights/requirements.txt -r services/gateway/requirements.txt
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm, cache-dependency-path: frontend/package-lock.json }
+      - run: cd frontend && npm ci
+      - run: make test
+        env:
+          REQUIRE_TEST_DEPS: "1"     # en CI un test omitido por falta de dependencias es un FALLO, no un "OK"
+
+  supply-chain-audit:            # pip-audit por servicio + npm audit del frontend
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [auth, cars, flights, gateway, hotels, ingestion, mock-source, orders]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pip-audit
+      - run: pip-audit -r services/${{ matrix.service }}/requirements.txt
+
+  npm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: cd frontend && npm install --package-lock-only --ignore-scripts && npm audit --omit=dev

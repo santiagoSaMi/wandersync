@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+<head>{% include "_layout_head.html.j2" %}<title>Vuelos {{ origin }} a {{ destination }} - MockTravel</title></head>
+<body>
+<header class="site"><a href="/">MockTravel</a></header>
+<main class="results-page" data-vertical="flights" data-total-results="{{ total }}">
+  <h1 class="search-title">Vuelos de <span class="city-from">{{ origin_city }}</span> a <span class="city-to">{{ destination_city }}</span></h1>
+  <p class="search-meta">{{ day }} &middot; {{ total }} resultados</p>
+  {% if not items %}<p class="empty">No encontramos vuelos para esta búsqueda.</p>{% endif %}
+  <ol class="results">
+  {% for it in items %}
+    <li class="result-card flight" data-offer-id="{{ it.offer_id }}">
+      <div class="carrier"><span class="airline-name">{{ it.airline }}</span> <span class="flight-code">{{ it.code }} {{ it.number }}</span></div>
+      <div class="schedule">
+        <time class="dep" datetime="{{ it.dep_iso }}">{{ it.dep_time }}</time> &ndash;
+        <time class="arr" datetime="{{ it.arr_iso }}">{{ it.arr_time }}{% if it.day_offset %}<sup>+{{ it.day_offset }}</sup>{% endif %}</time>
+      </div>
+      <div class="duration">{{ it.duration_text }}</div>
+      <div class="stops">{{ it.stops_text }}</div>
+      <div class="fare"><span class="cabin">{{ it.cabin }}</span> <span class="price">{{ it.price_text }}</span></div>
+    </li>
+  {% endfor %}
+  </ol>
+  {% include "_pagination.html.j2" %}
+</main>
+</body>
+</html>

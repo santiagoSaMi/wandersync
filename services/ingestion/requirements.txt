@@ -1,0 +1,10 @@
+# Una sola imagen para: Prefect server, scheduler Dask, workers Dask y el runner del flow.
+# Asi las versiones de dask/distributed/python coinciden en TODO el cluster (requisito de Dask).
+prefect>=3.0,<4.0
+prefect-dask>=0.3,<1.0
+dask[distributed,diagnostics]>=2024.8
+httpx>=0.27,<1.0
+beautifulsoup4>=4.12,<5.0
+# Prefect 3 declara sqlalchemy<3.0, pero su scheduler (insercion masiva de flow runs programados) falla con
+# SQLAlchemy 2.1 ("Can't evaluate bulk DML statement"): el cron nunca crea ejecuciones. Fijar a 2.0.x.
+sqlalchemy[asyncio]>=2.0,<2.1

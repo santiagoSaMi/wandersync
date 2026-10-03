@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>{% include "_layout_head.html.j2" %}<title>MockTravel - fuente simulada de WanderSync</title></head>
+<body>
+<header class="site"><a href="/">MockTravel</a></header>
+<main>
+  <h1>MockTravel</h1>
+  <p>Sitio de viajes <strong>simulado</strong> que WanderSync raspa como si fuera una fuente real
+     (HTML, paginación, precios en formatos distintos, latencia y fallos).</p>
+  <h2>Ejemplos</h2>
+  <ul>
+    <li><a href="/flights?origin=BOG&amp;destination=CTG&amp;date={{ sample_date }}">Vuelos BOG a CTG</a></li>
+    <li><a href="/hotels?city=CTG&amp;checkin={{ sample_date }}&amp;nights=3">Hoteles en Cartagena</a></li>
+    <li><a href="/cars?city=CTG&amp;pickup={{ sample_date }}&amp;days=3">Autos en Cartagena</a></li>
+  </ul>
+  <h2>Modo caos (demo de reintentos de Prefect)</h2>
+  <p>Estado actual: <code id="state">cargando…</code></p>
+  <label>Probabilidad de fallo (0 a 1)
+    <input id="rate" type="number" min="0" max="1" step="0.05" value="0.10"></label>
+  <button id="apply" type="button">Aplicar</button>
+  <script>
+    const state = document.getElementById("state");
+    async function load() {
+      const r = await fetch("/admin/chaos"); const j = await r.json();
+      state.textContent = JSON.stringify(j); document.getElementById("rate").value = j.failure_rate;
+    }
+    document.getElementById("apply").addEventListener("click", async () => {
+      await fetch("/admin/chaos", { method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ failure_rate: parseFloat(document.getElementById("rate").value) }) });
+      load();
+    });
+    load();
+  </script>
+</main>
+</body>
+</html>

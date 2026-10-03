@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #f4f6f8; color: #14213d; }
+  header.site { background: #14213d; color: #fff; padding: 12px 24px; }
+  header.site a { color: #fff; text-decoration: none; font-weight: 700; }
+  main { max-width: 860px; margin: 24px auto; padding: 0 16px; }
+  ol.results { list-style: none; padding: 0; display: grid; gap: 10px; }
+  li.result-card { background: #fff; border: 1px solid #d5dbe3; border-radius: 8px; padding: 12px 16px;
+                   display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; align-items: center; }
+  .price { font-weight: 700; font-size: 1.1rem; }
+  nav.pagination { display: flex; gap: 16px; align-items: center; margin: 20px 0; }
+</style><title>Vuelos BOG a CTG - MockTravel</title></head>
+<body>
+<header class="site"><a href="/">MockTravel</a></header>
+<main class="results-page" data-vertical="flights" data-total-results="21">
+  <h1 class="search-title">Vuelos de <span class="city-from">Bogotá</span> a <span class="city-to">Cartagena</span></h1>
+  <p class="search-meta">2026-10-15 &middot; 21 resultados</p>
+  
+  <ol class="results">
+  
+    <li class="result-card flight" data-offer-id="mt-befb2ba913ddb9de">
+      <div class="carrier"><span class="airline-name">Copa Airlines</span> <span class="flight-code">CM 1212</span></div>
+      <div class="schedule">
+        <time class="dep" datetime="2026-10-15T17:50">17:50</time> &ndash;
+        <time class="arr" datetime="2026-10-15T18:53">18:53</time>
+      </div>
+      <div class="duration">1h 03m</div>
+      <div class="stops">Directo</div>
+      <div class="fare"><span class="cabin">Economy</span> <span class="price">USD 176.59</span></div>
+    </li>
+  
+  </ol>
+  <nav class="pagination" data-page="3" data-total-pages="3">
+  <a rel="prev" href="/flights?origin=BOG&amp;destination=CTG&amp;date=2026-10-15&amp;page=2">Anterior</a>
+  <span>Página 3 de 3</span>
+  
+</nav>
+</main>
+</body>
+</html>

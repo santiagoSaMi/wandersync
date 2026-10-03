@@ -1,0 +1,5 @@
+<nav class="pagination" data-page="{{ page }}" data-total-pages="{{ total_pages }}">
+  {% if page > 1 %}<a rel="prev" href="{{ prev_url }}">Anterior</a>{% endif %}
+  <span>Página {{ page }} de {{ total_pages }}</span>
+  {% if page < total_pages %}<a rel="next" href="{{ next_url }}">Siguiente</a>{% endif %}
+</nav>

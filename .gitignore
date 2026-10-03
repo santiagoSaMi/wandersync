@@ -1,0 +1,18 @@
+# Secretos y entorno
+.env
+*.pem
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+# Node
+node_modules/
+frontend/dist/
+# Evidencias generadas (se conservan solo los .gitkeep)
+docs/security/audit-reports/*
+!docs/security/audit-reports/.gitkeep
+# SO / editores
+.DS_Store
+.idea/
+.vscode/

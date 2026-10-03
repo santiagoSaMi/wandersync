@@ -1,0 +1,10 @@
+# Dependencias SOLO de test (sin Docker): Postgres -> SQLite (aiosqlite), Redis -> fakeredis.
+# Instalar junto con los requirements de cada servicio:
+#   pip install -r requirements-test.txt -r services/auth/requirements.txt -r services/orders/requirements.txt \
+#               -r services/flights/requirements.txt -r services/gateway/requirements.txt
+# Sin ellas, `make test` omite los tests de integracion; con REQUIRE_TEST_DEPS=1 (CI) fallan en vez de omitirse.
+aiosqlite>=0.20,<1.0
+fakeredis>=2.23,<3.0
+beautifulsoup4>=4.12,<5.0
+# Consolidacion con dask.bag (ingestion/consolidate.py); los tests usan el scheduler local, sin cluster
+dask>=2024.8
