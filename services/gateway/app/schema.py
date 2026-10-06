@@ -40,6 +40,7 @@ CAR_COLS = frozenset({"id", "city_code", "city_name", "company", "model", "categ
 _IATA = re.compile(r"^[A-Za-z]{3}$")
 _IDEM = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 _OFFER_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
 def _iata(code: str, field: str) -> str:
@@ -221,6 +222,17 @@ class Mutation:
         if not consistent or len({f["currency"], h["currency"], c["currency"]}) != 1:
             raise gql_error("Las ofertas elegidas no forman un paquete válido.", "INVALID_PACKAGE")
 
+        # Viaje armado por el usuario: hora de recogida del auto, nunca antes de que aterrice el vuelo elegido
+        # (si el vuelo llega al día siguiente, arrival < departure, no se compara con la hora).
+        pickup = input.car_pickup_time
+        if pickup is not None:
+            if not _HHMM.match(pickup):
+                raise gql_error("Hora de recogida inválida: usa el formato HH:MM.", "INVALID_ARGUMENT")
+            lands_same_day = f["arrival_time"] >= f["departure_time"]
+            if lands_same_day and pickup < f["arrival_time"]:
+                raise gql_error(f"La recogida del auto ({pickup}) no puede ser antes de que aterrice tu vuelo "
+                                f"({f['arrival_time']}).", "INVALID_PICKUP_TIME")
+
         stops = "directo" if f["stops"] == 0 else f"{f['stops']} escala{'s' if f['stops'] > 1 else ''}"
         payload = {
             "user_id": user["id"], "contact_name": user["full_name"], "idempotency_key": input.idempotency_key,
@@ -231,7 +243,8 @@ class Mutation:
                       "title": h["name"], "detail": f"{h['stars']} estrellas, {h['nights']} noches desde {h['checkin']}"},
             "car": {"id": c["id"], "price_cents": c["total_price_cents"], "currency": c["currency"],
                     "title": f"{c['company']} {c['model']}",
-                    "detail": f"{c['category']}, {'automático' if c['transmission'] == 'AUTOMATIC' else 'manual'}, {c['days']} días"},
+                    "detail": f"{c['category']}, {'automático' if c['transmission'] == 'AUTOMATIC' else 'manual'}, {c['days']} días"
+                              + (f", recogida {c['pickup_date']} {pickup}" if pickup else "")},
             "simulate_failure": (input.simulate_failure.value
                                  if input.simulate_failure and settings.allow_failure_simulation else None),
             "step_delay_ms": (settings.demo_step_delay_ms

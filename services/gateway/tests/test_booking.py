@@ -158,6 +158,33 @@ class CreateBookingTests(unittest.TestCase):
         self.assertGreater(delay, 0)
         self.assertEqual([p["step_delay_ms"] for p in self.payloads], [0, 0, delay])
 
+    # ------------------------------------------------------------------ viaje armado: hora de recogida del auto
+    def test_pickup_time_is_saved_in_the_car_details(self):
+        body = self.book(carPickupTime="08:00")                    # el vuelo aterriza 07:30
+        self.assertNotIn("errors", body)
+        self.assertTrue(self.payloads[0]["car"]["detail"].endswith(", recogida 2026-10-12 08:00"))
+
+    def test_pickup_before_landing_is_rejected(self):
+        body = self.book(carPickupTime="07:00")
+        self.assertEqual(self.code(body), "INVALID_PICKUP_TIME")
+        self.assertIn("07:30", body["errors"][0]["message"])
+        self.assertEqual(self.payloads, [])
+
+    def test_pickup_time_format_is_validated(self):
+        for bad in ("8:00", "24:00", "12:60", "mañana"):
+            with self.subTest(bad=bad):
+                self.assertEqual(self.code(self.book(carPickupTime=bad)), "INVALID_ARGUMENT")
+        self.assertEqual(self.payloads, [])
+
+    def test_overnight_flight_does_not_block_early_pickup(self):
+        """Si el vuelo aterriza al día siguiente (llegada < salida), la hora no se compara."""
+        type(self).catalog_offers = offers(flight__departure_time="23:10", flight__arrival_time="01:20")
+        self.assertNotIn("errors", self.book(carPickupTime="02:00"))
+
+    def test_packages_without_pickup_time_keep_working(self):
+        self.book()
+        self.assertNotIn("recogida", self.payloads[0]["car"]["detail"])
+
     # ------------------------------------------------------------------ rate limiting de checkout
     def test_checkout_rate_limited_per_user(self):
         results = [self.code(self.book(idempotencyKey=f"key-{i:08d}")) for i in range(6)]

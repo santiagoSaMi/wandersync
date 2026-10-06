@@ -255,5 +255,7 @@ class BookingInput:
     car_offer_id: strawberry.ID
     idempotency_key: str
     simulate_failure: Optional[FailureTarget] = None
+    car_pickup_time: Optional[str] = strawberry.field(default=None, description=(
+        "Hora de recogida del auto (HH:MM), p. ej. al aterrizar el vuelo elegido. Opcional (paquetes armados)."))
     slow_motion: bool = strawberry.field(default=False, description=(
         "Solo para la demostracion: la SAGA avanza con una pausa por paso para verla en vivo."))

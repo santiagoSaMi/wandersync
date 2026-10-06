@@ -113,6 +113,8 @@ export default function CheckoutDialog({ pkg, onClose, onViewOrders }) {
             idempotencyKey: keyRef.current,
             simulateFailure: failure === "NONE" ? null : failure,
             slowMotion,
+            // viaje armado: hora de recogida del auto (los paquetes no la envían)
+            ...(pkg.carPickupTime ? { carPickupTime: pkg.carPickupTime } : {}),
           },
         },
       });
@@ -132,12 +134,12 @@ export default function CheckoutDialog({ pkg, onClose, onViewOrders }) {
   const lines = [
     [Plane, `Vuelo ${pkg.flight.airline} ${pkg.flight.flightNumber}`, pkg.flight.priceCents],
     [BedDouble, `${pkg.hotel.name}, ${pkg.nights} noches`, pkg.hotel.totalPriceCents],
-    [Car, `Auto ${pkg.car.company} ${pkg.car.model}`, pkg.car.totalPriceCents],
+    [Car, `Auto ${pkg.car.company} ${pkg.car.model}${pkg.carPickupTime ? ` · recogida ${pkg.carPickupTime}` : ""}`, pkg.car.totalPriceCents],
   ];
 
   return (
     <Dialog title={title} onClose={onClose} wide
-      description={!order ? "Revisa tu paquete. El precio se valida de nuevo contra el catálogo al pagar." : undefined}>
+      description={!order ? `Revisa tu ${pkg.carPickupTime ? "viaje" : "paquete"}. El precio se valida de nuevo contra el catálogo al pagar.` : undefined}>
       <AnimatePresence mode="wait" initial={false}>
         {!order ? (
           <motion.div key="confirm" exit={{ opacity: 0, y: -8 }} className="space-y-5">

@@ -165,4 +165,19 @@ describe("CheckoutDialog", () => {
     // la línea de tiempo también muestra el dinero en el paso de pago y en su reembolso
     expect(screen.getAllByText(nb(signedMoney(-60000, "USD"))).length).toBeGreaterThanOrEqual(2);
   }, 20000);
+
+  it("un viaje armado envía la hora de recogida del auto y la muestra en el resumen", async () => {
+    const trip = { ...PKG, carPickupTime: "15:05" };
+    const booking = {
+      request: { query: CREATE_BOOKING, variables: { input: { flightOfferId: "f1", hotelOfferId: "h1", carOfferId: "c1",
+        idempotencyKey: "key-12345678", simulateFailure: null, slowMotion: false, carPickupTime: "15:05" } } },
+      result: { data: { createBooking: order("CONFIRMED", [step("PAYMENT", "COMPLETED")]) } },
+    };
+    render(<MockedProvider mocks={[...walletMocks(500000), booking]} cache={createCache()}>
+      <CheckoutDialog pkg={trip} onClose={() => {}} onViewOrders={() => {}} />
+    </MockedProvider>);
+    expect(await screen.findByText(/recogida 15:05/)).toBeTruthy();
+    fireEvent.click(screen.getByText(/Pagar/));
+    await screen.findByText(/Reserva confirmada/);                     // la mutación coincidió con carPickupTime
+  });
 });

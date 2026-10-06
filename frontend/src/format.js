@@ -50,3 +50,11 @@ export function newIdempotencyKey() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `k-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
+
+// "14:35" + 30 -> "15:05". Devuelve null si se pasa de medianoche (la recogida es el mismo día).
+export function addMinutes(hhmm, minutes) {
+  const [h, m] = hhmm.split(":").map(Number);
+  const total = h * 60 + m + minutes;
+  if (total >= 24 * 60) return null;
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}

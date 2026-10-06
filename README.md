@@ -18,7 +18,7 @@ Documentación técnica con diagramas de secuencia de la SAGA: [`docs/ARQUITECTU
 
 | Qué | Estado |
 |---|---|
-| Tests sin Docker: parsers, motor SAGA y su runner, OrderActions (reintentos), API de orders (idempotencia, anti-IDOR, compensación), auth (Argon2id, bloqueo, session fixation), contrato de flights/hotels/cars, gateway (`createBooking`, límites de consulta, IP del cliente) y frontend (sondeo del checkout) | **177 tests pasan** (`make test`; los de integración requieren `pip install -r requirements-test.txt` + requirements de los servicios y `npm install` en `frontend/`; sin ellos se omiten, y en CI, con `REQUIRE_TEST_DEPS=1`, fallarían) |
+| Tests sin Docker: parsers, motor SAGA y su runner, OrderActions (reintentos), API de orders (idempotencia, anti-IDOR, compensación), auth (Argon2id, bloqueo, session fixation), contrato de flights/hotels/cars, gateway (`createBooking`, límites de consulta, IP del cliente) y frontend (sondeo del checkout) | **188 tests pasan** (`make test`; los de integración requieren `pip install -r requirements-test.txt` + requirements de los servicios y `npm install` en `frontend/`; sin ellos se omiten, y en CI, con `REQUIRE_TEST_DEPS=1`, fallarían) |
 | `docker compose up` completo (14 servicios sanos) | **Verificado** (2026-10-03) |
 | Ingesta Prefect + Dask contra Supabase real: grafo con flechas, reintentos, artefactos, cron cada 30 min | **Verificado**: 120 consultas, 3 workers, ~2.600 ofertas cargadas |
 | GraphQL de punta a punta (nginx → gateway → Supabase), sin over-fetching visible en `extensions.supabase` | **Verificado** con datos reales |
@@ -121,6 +121,13 @@ La línea de tiempo muestra Pago ✔, Vuelo ✔, Hotel ✔, Auto ✖ (3 intentos
 unos 2,5 s y luego ✔/✖, y las compensaciones se ven igual, una a una (≈ 12 s el camino feliz, ≈ 20 s con el fallo del auto).
 Ajusta la pausa con `DEMO_STEP_DELAY_MS` en `.env` (máx. 5000; requiere `ALLOW_FAILURE_SIMULATION=true`).
 Respaldo por consola con el mismo efecto: `make demo-slow`.
+
+**Arma tu viaje (paquete personalizado):** botón *Arma tu viaje* en la cabecera (o "Arma tu viaje paso a paso" bajo el
+buscador). Cuatro fases: **1 · Destino y vuelo** (ruta, fecha y el vuelo concreto, ordenable por precio, hora o duración),
+**2 · Hotel** en ese destino con entrada esa fecha, **3 · Auto** para esa fecha con la **hora de recogida según la llegada
+del vuelo** (al aterrizar, +30 min, +1 h, +2 h) y **4 · Revisión** con "Cambiar" en cada elección. *Continuar al pago* abre
+el checkout de siempre: billetera, SAGA paso a paso y su run en Prefect. La hora de recogida queda guardada en la reserva
+(*Mis reservas* → detalle del auto: "recogida 2026-10-10 07:27") y el gateway rechaza una recogida antes del aterrizaje.
 
 **El dinero en la SAGA (billetera):** cada usuario empieza con **US$ 5.000** (chip de saldo en la cabecera). En el checkout
 se ve "Pagas con tu billetera: saldo → saldo después del pago". Durante la SAGA (mejor en modo paso a paso) el panel

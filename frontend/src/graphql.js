@@ -98,3 +98,29 @@ export const DEMO_SET_WALLET = gql`
     demoSetWalletBalance(balanceCents: $cents) { id balanceCents currency movements { kind amountCents balanceAfterCents orderId createdAt } }
   }
 `;
+
+// "Arma tu viaje": vuelos de la ruta y fecha, y luego hoteles y autos en el destino para esa fecha.
+// Solo los campos que muestra el asistente (el gateway pide a Supabase solo esas columnas).
+export const TRIP_FLIGHTS = gql`
+  query TripFlights($origin: String!, $destination: String!, $date: Date!) {
+    flightOffers(origin: $origin, destination: $destination, departureDate: $date, first: 30) {
+      id airline flightNumber departureTime arrivalTime durationMinutes stops cabin priceCents currency destinationCity
+    }
+  }
+`;
+
+export const TRIP_HOTELS = gql`
+  query TripHotels($city: String!, $date: Date!) {
+    hotelOffers(cityCode: $city, checkin: $date, first: 30) {
+      id name stars rating amenities nights pricePerNightCents totalPriceCents currency
+    }
+  }
+`;
+
+export const TRIP_CARS = gql`
+  query TripCars($city: String!, $date: Date!) {
+    carOffers(cityCode: $city, pickupDate: $date, first: 30) {
+      id company model category transmission seats days pricePerDayCents totalPriceCents currency
+    }
+  }
+`;

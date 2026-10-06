@@ -3,7 +3,7 @@ import { useLazyQuery, useMutation, useQuery } from "@apollo/client";
 import { useLenis } from "lenis/react";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  CircleAlert, Compass, Database, ExternalLink, LogOut, Network, RefreshCw, SearchX, Sparkles, Terminal, Ticket, Wallet, Workflow,
+  CircleAlert, Compass, Database, ExternalLink, LogOut, Network, RefreshCw, Route, SearchX, Sparkles, Terminal, Ticket, Wallet, Workflow,
 } from "lucide-react";
 import { CATALOG, LOGOUT, ME, PACKAGES, WALLET } from "./graphql.js";
 import { dayLabel, errorText, timeAgo } from "./format.js";
@@ -17,6 +17,7 @@ import PackageTicket from "./components/PackageTicket.jsx";
 import CheckoutDialog from "./components/CheckoutDialog.jsx";
 import AuthDialog from "./components/AuthDialog.jsx";
 import OrdersView from "./components/OrdersView.jsx";
+import TripBuilder from "./components/TripBuilder.jsx";
 import WalletPanel from "./components/WalletPanel.jsx";
 import AnimatedMoney from "./components/AnimatedMoney.jsx";
 import FlightArc from "./components/FlightArc.jsx";
@@ -129,6 +130,7 @@ export default function App() {
           </button>
           <nav className="flex items-center gap-1 sm:gap-2" aria-label="Principal">
             <button type="button" className={cn(navLink(view === "search"), "hidden sm:inline-flex")} onClick={() => go("search")}>Buscar</button>
+            <button type="button" className={navLink(view === "builder")} onClick={() => go("builder")}>Arma tu viaje</button>
             {me && <button type="button" className={navLink(view === "orders")} onClick={() => go("orders")}>Mis reservas</button>}
             {me && <WalletChip overHero={overHero} onClick={() => go("orders")} />}
             {me ? (
@@ -181,6 +183,12 @@ export default function App() {
                   transition={{ delay: 0.15, type: "spring", duration: 0.9, bounce: 0.1 }} className="mt-12">
                   <SearchPanel catalog={catalog} busy={searching} value={selection} onChange={setSelection} onSearch={search} />
                 </motion.div>
+                <button type="button" onClick={() => go("builder")}
+                  className="group mt-4 inline-flex items-center gap-2 text-sm font-medium text-white/85 hover:text-white">
+                  <Route className="size-4 text-coral" aria-hidden="true" />
+                  ¿Prefieres elegir cada cosa? Arma tu viaje paso a paso: vuelo, hotel y auto
+                  <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
+                </button>
 
                 <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-white/70" aria-live="polite">
                   {!catalog && <span>Conectando con el catálogo…</span>}
@@ -265,6 +273,24 @@ export default function App() {
               </div>
             </div>
           </>
+        )}
+
+        {view === "builder" && (
+          <section aria-label="Arma tu viaje" className="paper-dots flex-1">
+            <div className="mx-auto max-w-6xl px-4 pb-20 pt-32 sm:px-6">
+              <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-coral">Tu viaje, a tu manera</p>
+                <h2 className="mt-1 font-serif text-5xl leading-tight">Arma tu viaje</h2>
+                <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                  Elige tu vuelo, un hotel en el destino para esa fecha y un auto que te espere cuando aterrices.
+                  Al final revisas todo y pagas con tu billetera; la reserva se confirma con la SAGA, como siempre.
+                </p>
+              </motion.div>
+              {catalog?.ready
+                ? <TripBuilder catalog={catalog} onCheckout={book} />
+                : <p className="rounded-2xl border border-dashed bg-card px-6 py-10 text-center text-muted-foreground">El catálogo se está cargando…</p>}
+            </div>
+          </section>
         )}
 
         {view === "orders" && me && (
